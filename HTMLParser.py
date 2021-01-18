@@ -102,7 +102,7 @@ if __name__ == "__main__":
         filename_converted = filename_prefix + ".csv"
 
         print("Converting {0} to CSV...".format(filename))
-        file = open(filename)
+        file = open(filename, encoding="utf8")
         parser = CustomHTMLParser()
         parser.feed(file.read())
         file.close()
