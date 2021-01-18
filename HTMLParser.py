@@ -5,11 +5,10 @@ from html.parser import HTMLParser
 # Constants used in parsing
 COLUMN_CLASS = "ellipsis smart-caption__text"
 COMPANY_NAME_PREFIX = "/profile/"
-COLUMN_DATA_CLASS = "ellipsis"
+COLUMN_DATA_CLASS_NAMES = ["ellipsis", "column-type column-type_estimated ellipsis"]
 CELL_PREFIX = "search-results-data-table-row"
 CELL = "cell"
 SPAN = "span"
-CSV_FILE = "converted.csv"
 
 # Global variables
 is_col = False
@@ -18,6 +17,9 @@ is_column_data = False
 
 split_col = 0
 cell_loc = (-1, -1)
+
+min_row = sys.maxsize
+max_row = 0
 
 # Extracted Data
 column_names = []
@@ -32,6 +34,7 @@ class CustomHTMLParser(HTMLParser):
         global is_company_name
         global is_column_data
         global cell_loc
+        global min_row, max_row
         for k, v in attrs:
             # Start tag for a column name
             if v == COLUMN_CLASS:
@@ -42,9 +45,11 @@ class CustomHTMLParser(HTMLParser):
             # Tag identifying a cell in the table - must include both row and column
             elif v.startswith(CELL_PREFIX) and CELL in v:
                 tokens = v.split("-")
-                cell_loc = int(tokens[5]), int(tokens[7]) # row, col
+                r_i, c_i = int(tokens[5]), int(tokens[7])
+                cell_loc = r_i, c_i
+                min_row, max_row = min(max_row, r_i), max(max_row, r_i)
             # Start tag for data in the table
-            elif v == COLUMN_DATA_CLASS:
+            elif v in COLUMN_DATA_CLASS_NAMES:
                 is_column_data = True
 
     # Some of the column headers are split into multiple elements/lines, so split_col detects that
@@ -88,36 +93,44 @@ class CustomHTMLParser(HTMLParser):
 
 if __name__ == "__main__":
     # Default to html.txt if no file specified
-    filename = "html.txt"
+    filenames = ["html.txt"]
     if len(sys.argv) > 1:
-        filename = sys.argv[1]
+        filenames = sys.argv[1:]
 
-    print("Converting {0} to CSV...".format(filename))
-    file = open(filename)
-    parser = CustomHTMLParser()
-    parser.feed(file.read())
-    file.close()
+    for filename in filenames:
+        filename_prefix = filename.split(".")[0]
+        filename_converted = filename_prefix + ".csv"
 
-    # Convert extracted data into lists of columns - done column-wise because the primary column is separated in HTML
-    df_data_raw = [company_names]
-    num_cols, num_rows = len(column_names), len(company_names)
-    for c in range(num_cols - 1): # Account for the primary "Company Name" column, which isn't included here
-        curr_col = [""] * num_rows
-        for r in range(num_rows):
-            if (r, c) in loc_to_data:
-                curr_col[r] = loc_to_data[(r, c)]
-        df_data_raw.append(curr_col)
+        print("Converting {0} to CSV...".format(filename))
+        file = open(filename)
+        parser = CustomHTMLParser()
+        parser.feed(file.read())
+        file.close()
 
-    # Convert list of columns into dictionary to pass into data frame
-    df_data_dict = {}
-    for i, col in enumerate(df_data_raw):
-        df_data_dict[column_names[i]] = col
+        # Convert extracted data into lists of columns - done column-wise because primary column is separated in HTML
+        df_data_raw = [company_names]
+        num_cols, num_rows = len(column_names), len(company_names)
+        for c in range(num_cols - 1):  # Account for the primary "Company Name" column, which isn't included here
+            curr_col = [""] * num_rows
+            for r in range(num_rows):
+                if (r, c) in loc_to_data:
+                    curr_col[r] = loc_to_data[(r, c)]
+            df_data_raw.append(curr_col)
 
-    # Create dataframe and start index at 1 instead of 0 (default)
-    df = pd.DataFrame(df_data_dict, index=range(1, num_rows+1))
-    df_rows, df_cols = df.shape
+        # Convert list of columns into dictionary to pass into data frame
+        df_data_dict = {}
+        for i, col in enumerate(df_data_raw):
+            df_data_dict[column_names[i]] = col
 
-    # Save as CSV
-    df.to_csv(CSV_FILE)
-    print("Successfully extracted {0} rows and {1} columns, saved to {2}!".format(df_rows, df_cols, CSV_FILE))
+        # Create dataframe and start index at 1 instead of 0 (default)
+        df = pd.DataFrame(df_data_dict, index=range(1, num_rows + 1))
+        df_rows, df_cols = df.shape
 
+        # Save as CSV
+        df.to_csv(filename_converted)
+        print("Successfully extracted {0} rows and {1} columns, saved to {2}!".format(df_rows, df_cols,
+                                                                                      filename_converted))
+        # Reset global variables for next file
+        column_names = []
+        company_names = []
+        loc_to_data = {}
