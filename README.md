@@ -1,5 +1,5 @@
 # HTMLtoCSV
-Converts HTML to CSV for PitchBook tables 
+Converts HTML to CSV
 
 # Instructions
 Run `HTMLParser.py` and specify files to convert as command-line arguments. You can specify multiple files by separating arguments with spaces. 
